@@ -40,7 +40,7 @@ pub struct Tickeys
 	first_n_non_unique: i16,
 
 	last_keys: VecDeque<u8>,
-
+	
 	keyboard_monitor: Option< event_tap::KeyboardMonitor>, //defered
 
 	on_keydown: Option<fn(sender:&Tickeys, key: u8)>,
@@ -52,17 +52,19 @@ impl Tickeys
 {
 	pub fn new(schemes: Vec<AudioScheme>) -> Tickeys
 	{
-		unsafe{alutInit(std::ptr::null_mut(), std::ptr::null_mut());}
-
-		Tickeys
+		unsafe
 		{
+			alutInit(std::ptr::null_mut(), std::ptr::null_mut());
+		}
+
+		Tickeys{
 			volume:1f32,
-			pitch:1f32,
-			audio_player: SimpleAudioPlayer::new(2),
+			pitch:1f32, 
+			audio_player: SimpleAudioPlayer::new(2), 
 			keymap: BTreeMap::new(),
 			first_n_non_unique: -1,
-			last_keys: VecDeque::with_capacity(8),
-			keyboard_monitor:None,
+			last_keys: VecDeque::with_capacity(8), 
+			keyboard_monitor:None, 
 			on_keydown: Option::None,
 			schemes: schemes,
 		}
@@ -71,6 +73,7 @@ impl Tickeys
 	pub fn start(&mut self)
 	{
 		let tap;
+
 		let ptr_to_self: *mut c_void = unsafe{std::mem::transmute(self)};
 
 		unsafe
@@ -106,7 +109,9 @@ impl Tickeys
 	pub fn load_scheme(&mut self, dir: &str, scheme_name: &str)
 	{
 		let scheme = self.find_scheme(scheme_name);
+
 		let mut audio_data = Vec::with_capacity(scheme.files.len());
+
 		let mut path = dir.to_string() + "/";
 		let base_path_len = path.chars().count();
 
@@ -115,18 +120,22 @@ impl Tickeys
 			path.push_str(f);
 			println!("loading audio:{}", path);
 			let audio = AudioData::from_file(&path);
+
 			if audio.buffer == 0 as ALuint
 			{
 				panic!("failed to load audio file:{}", f);
 			}
+
 			path.truncate(base_path_len);
+			
 			audio_data.push(audio);
 		}
 
 		self.audio_player.load_data(audio_data);
+		
 		self.audio_player.set_gain(self.volume);
 		self.audio_player.set_pitch(self.pitch);
-
+		
 		self.keymap = scheme.key_audio_map.clone();
 		self.first_n_non_unique = scheme.non_unique_count as i16;
 	}
@@ -135,6 +144,7 @@ impl Tickeys
 	{
 		if volume == self.volume {return;}
 		self.volume = volume;
+		
 		self.audio_player.set_gain(volume);
 	}
 
@@ -142,6 +152,7 @@ impl Tickeys
 	{
 		if pitch == self.pitch {return;}
 		self.pitch = pitch;
+
 		self.audio_player.set_pitch(pitch);
 	}
 
@@ -166,7 +177,9 @@ impl Tickeys
 	extern fn handle_keyboard_event(proxy: CGEventTapProxy, etype: CGEventType, event: CGEventRef, refcon: *mut c_void) -> CGEventRef
 	{
 		let keycode = unsafe{CGEventGetIntegerValueField(event, CGEventField::kCGKeyboardEventKeycode)} as u16;
+
 		assert!(refcon != 0 as *mut c_void);
+
 		let tickeys: &mut Tickeys = unsafe{ std::mem::transmute(refcon)};
 		tickeys.handle_keydown(keycode as u8);
 
@@ -174,26 +187,45 @@ impl Tickeys
 	}
 
 	fn handle_keydown(&mut self, keycode: u8)
-	{
+	{	
 		self.last_keys.push_back(keycode);
 		if self.last_keys.len() > 6  //todo: make the length configurable
 		{
 			self.last_keys.pop_front();
 		}
 
-		self.on_keydown.map(|f| f(self, keycode));
+		match self.on_keydown
+		{
+			None => {},
+			Some(f) => f(self, keycode)
+		}
+
+		//println!("key:{}", keycode);
 
 		let index:i32 = match self.keymap.get(&keycode)
 		{
 			Some(idx) => *idx as i32,
-			None =>
+			None => 
 			{
-				if self.first_n_non_unique <= 0 { -1 }
-				else { (keycode % (self.first_n_non_unique as u8)) as i32 }
+				if self.first_n_non_unique <= 0 
+				{
+					-1
+				}else
+				{
+					(keycode % (self.first_n_non_unique as u8)) as i32
+				}
 			}
 		};
-		if self.is_too_frequent(keycode){ return; }
-		if index == -1 { return; }
+		
+		if self.is_too_frequent(keycode)
+		{
+			return;
+		}
+
+		if index == -1 
+		{
+			return;
+		}
 
 		self.audio_player.play(index as usize);
 	}
@@ -223,7 +255,9 @@ impl Tickeys
 
 			return false;
 		}
+
 	}
+
 }
 
 pub struct AudioData
@@ -238,9 +272,14 @@ impl AudioData
 	{
 		let file_ptr = std::ffi::CString::new(file).unwrap().as_ptr();
 		let mut audio = AudioData{buffer:0};
+		
 		unsafe
 		{
 			audio.buffer = alutCreateBufferFromFile(file_ptr);
+			// Create sound source (use buffer to fill source)
+    		//alGenSources(1, &mut audio.source);
+    		//alSourcei(audio.source, AL_BUFFER, audio.buffer as ALint);
+
     		if audio.buffer == 0
     		{
     			panic!("failed to load file [{}]: {}", alutGetError() ,file);
@@ -254,6 +293,7 @@ impl AudioData
 	{
 		self.buffer
 	}
+
 }
 
 impl Drop for AudioData
@@ -264,15 +304,16 @@ impl Drop for AudioData
 		{
     		alDeleteBuffers(1, &self.buffer);
 		}
+		
 	}
 }
 
-struct AudioSource
+struct AudioSource 
 {
 	id: ALuint,
 }
 
-impl AudioSource
+impl AudioSource 
 {
 	pub fn new() -> Option<AudioSource>
 	{
@@ -290,15 +331,16 @@ impl AudioSource
 	{
 		self.stop();
 		unsafe
-		{
-			alSourcei(self.id, AL_BUFFER, data.id() as ALint);
+		{ 
+			alSourcei(self.id, AL_BUFFER, data.id() as ALint); 
+
 		}
 	}
 
 	pub fn disconnect_from_buffer(&mut self)
 	{
 		unsafe
-		{
+		{		
 			alSourceStop(self.id);
 			alSourcei(self.id, AL_BUFFER, 0);
 		}
@@ -398,6 +440,7 @@ impl SimpleAudioPlayer
 		oldest_source.play();
 
 		self.source_cache.push_back(oldest_source);
+
 	}
 
 	pub fn unload_data(&mut self)
@@ -414,3 +457,12 @@ impl Drop for SimpleAudioPlayer
 		self.unload_data();
 	}
 }
+
+
+
+
+
+
+
+
+
